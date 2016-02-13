@@ -22,8 +22,17 @@ class SafeDataSourceKitTests: XCTestCase {
     }
     
     func testExample() {
-        // This is an example of a functional test case.
-        // Use XCTAssert and related functions to verify your tests produce the correct results.
+      let ex = expectationWithDescription(".")
+
+      let queue = SerialUIOperationQueue()
+      queue.addOperationWithBlock {
+        print("hi")
+        ex.fulfill()
+      }
+
+      waitForExpectationsWithTimeout(1000000, handler: nil)
+
+
     }
     
     func testPerformanceExample() {

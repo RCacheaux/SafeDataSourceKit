@@ -10,6 +10,8 @@
 		281818411C6EA36F000BB894 /* SafeDataSourceKit.h in Headers */ = {isa = PBXBuildFile; fileRef = 281818401C6EA36F000BB894 /* SafeDataSourceKit.h */; settings = {ATTRIBUTES = (Public, ); }; };
 		281818481C6EA36F000BB894 /* SafeDataSourceKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 2818183D1C6EA36F000BB894 /* SafeDataSourceKit.framework */; };
 		2818184D1C6EA36F000BB894 /* SafeDataSourceKitTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2818184C1C6EA36F000BB894 /* SafeDataSourceKitTests.swift */; };
+		281818581C6EA3A4000BB894 /* SafeDataSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = 281818571C6EA3A4000BB894 /* SafeDataSource.swift */; };
+		2818185A1C6EA9E2000BB894 /* SerialUIOperationQueue.swift in Sources */ = {isa = PBXBuildFile; fileRef = 281818591C6EA9E2000BB894 /* SerialUIOperationQueue.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -29,6 +31,8 @@
 		281818471C6EA36F000BB894 /* SafeDataSourceKitTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SafeDataSourceKitTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		2818184C1C6EA36F000BB894 /* SafeDataSourceKitTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SafeDataSourceKitTests.swift; sourceTree = "<group>"; };
 		2818184E1C6EA36F000BB894 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		281818571C6EA3A4000BB894 /* SafeDataSource.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = SafeDataSource.swift; sourceTree = "<group>"; };
+		281818591C6EA9E2000BB894 /* SerialUIOperationQueue.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = SerialUIOperationQueue.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -73,6 +77,8 @@
 			children = (
 				281818401C6EA36F000BB894 /* SafeDataSourceKit.h */,
 				281818421C6EA36F000BB894 /* Info.plist */,
+				281818571C6EA3A4000BB894 /* SafeDataSource.swift */,
+				281818591C6EA9E2000BB894 /* SerialUIOperationQueue.swift */,
 			);
 			path = SafeDataSourceKit;
 			sourceTree = "<group>";
@@ -144,7 +150,7 @@
 			attributes = {
 				LastSwiftUpdateCheck = 0720;
 				LastUpgradeCheck = 0720;
-				ORGANIZATIONNAME = rcach;
+				ORGANIZATIONNAME = "René Cacheaux";
 				TargetAttributes = {
 					2818183C1C6EA36F000BB894 = {
 						CreatedOnToolsVersion = 7.2.1;
@@ -194,6 +200,8 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				281818581C6EA3A4000BB894 /* SafeDataSource.swift in Sources */,
+				2818185A1C6EA9E2000BB894 /* SerialUIOperationQueue.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -308,6 +316,7 @@
 		281818521C6EA36F000BB894 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				CLANG_ENABLE_MODULES = YES;
 				DEFINES_MODULE = YES;
 				DYLIB_COMPATIBILITY_VERSION = 1;
 				DYLIB_CURRENT_VERSION = 1;
@@ -318,12 +327,14 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.rcach.SafeDataSourceKit;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 			};
 			name = Debug;
 		};
 		281818531C6EA36F000BB894 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				CLANG_ENABLE_MODULES = YES;
 				DEFINES_MODULE = YES;
 				DYLIB_COMPATIBILITY_VERSION = 1;
 				DYLIB_CURRENT_VERSION = 1;
@@ -376,6 +387,7 @@
 				281818531C6EA36F000BB894 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
 		};
 		281818541C6EA36F000BB894 /* Build configuration list for PBXNativeTarget "SafeDataSourceKitTests" */ = {
 			isa = XCConfigurationList;
@@ -384,6 +396,7 @@
 				281818561C6EA36F000BB894 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
 	};
