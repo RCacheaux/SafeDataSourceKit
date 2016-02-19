@@ -409,8 +409,8 @@ class ApplyDataSourceChangeOperation<T>: AsyncOperation {
         // Range of existing items in data source array before any changes applied in this op
 
 
-        let sectionStartingRanges = self.safeDataSource.dataSourceItems.enumerate().map { index, items in
-          return 0..<self.safeDataSource.dataSourceItems[0].count
+        let preDeleteSectionStartingRanges = self.safeDataSource.dataSourceItems.enumerate().map { index, items in
+          return 0..<self.safeDataSource.dataSourceItems[index].count
         }
 
         var sectionAdditions: [Int:Range<Int>] = [:]
@@ -422,6 +422,35 @@ class ApplyDataSourceChangeOperation<T>: AsyncOperation {
           return Set<NSIndexPath>()
         }
 
+
+        for change in changes {
+          if case .DeleteItem(let midPointInTimeIndexPath) = change {
+            // C:
+            if preDeleteSectionStartingRanges[midPointInTimeIndexPath.section] ~= midPointInTimeIndexPath.item { // Deleting from existing items
+              // This gets complicated, we need to offset any insertions into existing items after this index we are deleting
+              sectionDeletions[midPointInTimeIndexPath.section].insert(midPointInTimeIndexPath)
+            }
+            // :C
+          } else if case .DeleteItems(let midPointInTimeIndexPaths) = change {
+            for indexPath in midPointInTimeIndexPaths {
+              // C:
+              if preDeleteSectionStartingRanges[indexPath.section] ~= indexPath.item { // Deleting from existing items
+                // This gets complicated, we need to offset any insertions into existing items after this index we are deleting
+                sectionDeletions[indexPath.section].insert(indexPath)
+              }
+              // :C
+            }
+          }
+        }
+
+        let postDeleteSectionStartingRanges = self.safeDataSource.dataSourceItems.enumerate().map { sectionIndex, items in
+          return 0..<(self.safeDataSource.dataSourceItems[sectionIndex].count - sectionDeletions[sectionIndex].count)
+        }
+
+
+        var onGoingExistingDeletes: [[NSIndexPath]] = self.safeDataSource.dataSourceItems.map { _ in
+          return []
+        }
 
         for change in changes {
           switch change {
@@ -445,7 +474,7 @@ class ApplyDataSourceChangeOperation<T>: AsyncOperation {
             let x = 1
           case .AppendItem(_, let sectionIndex): // Item, Section Index
             if sectionAdditions[sectionIndex] == nil {
-              let startingRange = sectionStartingRanges[sectionIndex]
+              let startingRange = postDeleteSectionStartingRanges[sectionIndex]
               sectionAdditions[sectionIndex] = startingRange.endIndex..<startingRange.endIndex
             }
             if let sectionAdditionsForSection = sectionAdditions[sectionIndex] {
@@ -453,7 +482,7 @@ class ApplyDataSourceChangeOperation<T>: AsyncOperation {
             }
           case .AppendItems(let items, let sectionIndex): // Items, Section Index
             if sectionAdditions[sectionIndex] == nil {
-              let startingRange = sectionStartingRanges[sectionIndex]
+              let startingRange = postDeleteSectionStartingRanges[sectionIndex]
               sectionAdditions[sectionIndex] = startingRange.endIndex..<startingRange.endIndex
             }
             if let sectionAdditionsForSection = sectionAdditions[sectionIndex] {
@@ -462,14 +491,14 @@ class ApplyDataSourceChangeOperation<T>: AsyncOperation {
           case .InsertItem(_, let indexPath):
             // TODO: What if this is an insertion into a new section?
             // A:
-            if sectionStartingRanges[indexPath.section] ~= indexPath.item { // Inserting into existing items
+            if preDeleteSectionStartingRanges[indexPath.section] ~= (indexPath.item + onGoingExistingDeletes[indexPath.section].count) { // Inserting into existing items
               sectionInsertions[indexPath.section].insert(indexPath)
               if let sectionAdditionsForSection = sectionAdditions[indexPath.section] {
                 sectionAdditions[indexPath.section] = sectionAdditionsForSection >> 1
               }
             } else { // NOT inserting into existing items
               if sectionAdditions[indexPath.section] == nil {
-                let startingRange = sectionStartingRanges[indexPath.section]
+                let startingRange = postDeleteSectionStartingRanges[indexPath.section]
                 sectionAdditions[indexPath.section] = startingRange.endIndex..<startingRange.endIndex
               }
               if let sectionAdditionsForSection = sectionAdditions[indexPath.section] {
@@ -481,14 +510,14 @@ class ApplyDataSourceChangeOperation<T>: AsyncOperation {
           case .InsertItems(_, let indexPaths):
             for indexPath in indexPaths {
               // A:
-              if sectionStartingRanges[indexPath.section] ~= indexPath.item { // Inserting into existing items
+              if preDeleteSectionStartingRanges[indexPath.section] ~= (indexPath.item + onGoingExistingDeletes[indexPath.section].count) { // Inserting into existing items
                 sectionInsertions[indexPath.section].insert(indexPath)
                 if let sectionAdditionsForSection = sectionAdditions[indexPath.section] {
                   sectionAdditions[indexPath.section] = sectionAdditionsForSection >> 1
                 }
               } else { // NOT inserting into existing items
                 if sectionAdditions[indexPath.section] == nil {
-                  let startingRange = sectionStartingRanges[indexPath.section]
+                  let startingRange = postDeleteSectionStartingRanges[indexPath.section]
                   sectionAdditions[indexPath.section] = startingRange.endIndex..<startingRange.endIndex
                 }
                 if let sectionAdditionsForSection = sectionAdditions[indexPath.section] {
@@ -501,64 +530,44 @@ class ApplyDataSourceChangeOperation<T>: AsyncOperation {
 
           case .DeleteItem(let indexPath):
             // B:
-            if sectionStartingRanges[indexPath.section] ~= indexPath.item { // Deleting from existing items
-              // This gets complicated, we need to offset any insertions into existing items after this index we are deleting
-              sectionDeletions[indexPath.section].insert(indexPath)
-              for insertionIndexPath in sectionInsertions[indexPath.section] {
-                if insertionIndexPath.item > indexPath.item { // TODO: What if insertion index path matches deletion index path
-                  print("deleting an item that is before item that will be insterted into existing items")
-                  insertionIndexPath.section
-                  insertionIndexPath.item
-                  sectionInsertions[indexPath.section].remove(insertionIndexPath)
-                  sectionInsertions[indexPath.section].insert(NSIndexPath(forItem: insertionIndexPath.item - 1, inSection: insertionIndexPath.section))
+            // This accounts for the fact that the index path given to us is in the context of an array with potentially deleted items.
+            if preDeleteSectionStartingRanges[indexPath.section] ~= (indexPath.item + onGoingExistingDeletes[indexPath.section].count)   { // Deleting from existing items
+              // Do nothing this deletion has already been accounted for, excpet for keeping track
+              onGoingExistingDeletes[indexPath.section].append(indexPath) // TODO: will something reference this index path later if so be careful about index that should be shifted!
 
-                }
-              }
 
-              if let sectionAdditionsForSection = sectionAdditions[indexPath.section] {
-                sectionAdditions[indexPath.section] = sectionAdditionsForSection << 1
-              }
             } else { // NOT deleting from existing items, no deleting from datasource, items never made it to collection view no need to add these items just to delete them
-              if sectionAdditions[indexPath.section] == nil {
-                let startingRange = sectionStartingRanges[indexPath.section]
-                sectionAdditions[indexPath.section] = startingRange.endIndex..<startingRange.endIndex
-              }
               if let sectionAdditionsForSection = sectionAdditions[indexPath.section] {
                 sectionAdditions[indexPath.section] = sectionAdditionsForSection - 1 // TODO: Remove addition range if range becomes 0..<0
+              } else {
+                // This should never occur, this means a delete command was given for an item that hasn't been added yet. We are iterating in the changlist order.
+                assertionFailure("Encountered an addition deletion for an item that has not been added before in the changelist order.")
               }
             } // :B
 
           case .DeleteItems(let indexPaths):
             for indexPath in indexPaths {
               // B:
-              if sectionStartingRanges[indexPath.section] ~= indexPath.item { // Deleting from existing items
-                // This gets complicated, we need to offset any insertions into existing items after this index we are deleting
-                sectionDeletions[indexPath.section].insert(indexPath)
-                for insertionIndexPath in sectionInsertions[indexPath.section] {
-                  if insertionIndexPath.item > indexPath.item { // TODO: What if insertion index path matches deletion index path
-                    print("deleting an item that is before item that will be insterted into existing items")
-                    insertionIndexPath.section
-                    insertionIndexPath.item
-                    sectionInsertions[indexPath.section].remove(insertionIndexPath)
-                    sectionInsertions[indexPath.section].insert(NSIndexPath(forItem: insertionIndexPath.item - 1, inSection: insertionIndexPath.section))
+              // This accounts for the fact that the index path given to us is in the context of an array with potentially deleted items.
+              if preDeleteSectionStartingRanges[indexPath.section] ~= (indexPath.item + onGoingExistingDeletes[indexPath.section].count)   { // Deleting from existing items
+                // Do nothing this deletion has already been accounted for, excpet for keeping track
+                onGoingExistingDeletes[indexPath.section].append(indexPath)
 
-                  }
-                }
-
-                if let sectionAdditionsForSection = sectionAdditions[indexPath.section] {
-                  sectionAdditions[indexPath.section] = sectionAdditionsForSection << 1
-                }
               } else { // NOT deleting from existing items, no deleting from datasource, items never made it to collection view no need to add these items just to delete them
-                if sectionAdditions[indexPath.section] == nil {
-                  let startingRange = sectionStartingRanges[indexPath.section]
-                  sectionAdditions[indexPath.section] = startingRange.endIndex..<startingRange.endIndex
-                }
                 if let sectionAdditionsForSection = sectionAdditions[indexPath.section] {
-                  sectionAdditions[indexPath.section] = sectionAdditionsForSection - 1
+                  sectionAdditions[indexPath.section] = sectionAdditionsForSection - 1 // TODO: Remove addition range if range becomes 0..<0
+                } else {
+                  // This should never occur, this means a delete command was given for an item that hasn't been added yet. We are iterating in the changlist order.
+                  assertionFailure("Encountered an addition deletion for an item that has not been added before in the changelist order.")
                 }
               } // :B
             }
-          case .DeleteLastItem(let sectionIndex): // Section Index
+          case .DeleteLastItem: // Section Index
+
+            assertionFailure("Delete Last Item in Section not implemented yet.")
+
+
+            /*
             if let sectionAdditionsForSection = sectionAdditions[sectionIndex] { // There are additions, just remove from there
               let x = 1
               sectionAdditions[sectionIndex]?.startIndex
@@ -596,10 +605,48 @@ class ApplyDataSourceChangeOperation<T>: AsyncOperation {
             } else {
               print(":-/")
             }
+            */
 
-          case .DeleteItemsStartingAtIndexPath(let indexPath): // Will delete all items from index path forward for section
-            let x = 1
+          case .DeleteItemsStartingAtIndexPath: // Will delete all items from index path forward for section
+            assertionFailure("Delete items starting at index path not implemented yet.")
+
           case .MoveItem(let fromIndexPath, let toIndexPath):
+            // TODO: Handle if move is for item that is to be deleted.
+
+
+            // >>>> TODO!!!!!! - the + shift should only occur for deletions with item index less than this guys
+            let fromIndexPathInExistingItemRange = preDeleteSectionStartingRanges[fromIndexPath.section] ~= (fro mIndexPath.item + onGoingExistingDeletes[fromIndexPath.section].count)
+            let toIndexPathInExistingItemRange = preDeleteSectionStartingRanges[toIndexPath.section] ~= (toIndexPath.item + onGoingExistingDeletes[toIndexPath.section].count)
+            if fromIndexPathInExistingItemRange && toIndexPathInExistingItemRange { // TODO: Test for if existing with pre delete data structure and shift index paths based on ongoing existingDeletes.
+              // is the move within existing?
+              // then it's a move operation - Need to figure out what the real from index path and to index path are
+              // is there a delete...
+              // is the move going to affect any pending changes within existing items?
+
+
+              // The move is within the postDelete existing items, just need to make a move op with theses index paths
+
+
+              // Take into account any deletions within the existing items and shift the index paths accordingly
+
+            } else if !toIndexPathInExistingItemRange && !toIndexPathInExistingItemRange {
+              // is the move within additions?
+              // just need to change the index paths where this will initially get inserted, no move necessary
+
+
+            } else {
+              // is the move across additions and existing
+              // I THINK this is just a move operation, need to verify
+
+
+            }
+
+
+
+
+
+
+
             let x = 1
           }
         }
@@ -681,7 +728,24 @@ class ApplyDataSourceChangeOperation<T>: AsyncOperation {
   }
 
 
+
+
+  func itemBatchStartingIndexPath(deletionsUpToThisPoint deletionsUpToThisPoint: [[NSIndexPath]], givenIndexPath: NSIndexPath) -> NSIndexPath {
+    var offsetCount = 0 // TODO: Use fancy higher order funcs if possible
+    let deletions = deletionsUpToThisPoint[givenIndexPath.section]
+    for deletion in deletions {
+      if deletion.item < givenIndexPath.item { // TODO: Think more about whether this should be <=
+        offsetCount += 1
+      }
+    }
+    return NSIndexPath(forRow: givenIndexPath.item + offsetCount, inSection: givenIndexPath.section)
+  }
 }
+
+
+
+
+
 
 let cellForItem = { (collectionView: UICollectionView, item: Color, indexPath: NSIndexPath) -> UICollectionViewCell in
   let cell = collectionView.dequeueReusableCellWithReuseIdentifier("cell", forIndexPath: indexPath)
@@ -719,7 +783,7 @@ let tgr = UITapGestureRecognizer(target: interactionHandler, action: "handleTap"
 collectionView.addGestureRecognizer(tgr)
 
 dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0)) {
-  for _ in (0...19) {
+  for _ in (0...1000) {
     interactionHandler.handleTap()
   }
 
@@ -736,7 +800,7 @@ dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0)) {
     return nil
   }
 
-  for _ in (0...1) { // TODO: Try (0...1) and this will crash, support multiple consecutive deletes
+  for _ in (0...2) { // TODO: Try (0...1) and this will crash, support multiple consecutive deletes
     interactionHandler.safeDataSource.deleteItemWithClosure { colors in
       print("Delete item: loop")
       if colors.count > 0 {
@@ -753,20 +817,20 @@ dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0)) {
     return NSIndexPath(forItem: 0, inSection: 0)
   }
 
-  interactionHandler.safeDataSource.deleteLastItemInSection(0)
-  interactionHandler.safeDataSource.deleteLastItemInSection(0)
-  interactionHandler.safeDataSource.deleteLastItemInSection(0)
-  interactionHandler.safeDataSource.deleteLastItemInSection(0)
-  interactionHandler.safeDataSource.deleteLastItemInSection(0)
-  interactionHandler.safeDataSource.deleteLastItemInSection(0)
-  interactionHandler.safeDataSource.deleteLastItemInSection(0)
-  interactionHandler.safeDataSource.deleteLastItemInSection(0)
-  interactionHandler.safeDataSource.deleteLastItemInSection(0)
-  interactionHandler.safeDataSource.deleteLastItemInSection(0)
-  interactionHandler.safeDataSource.deleteLastItemInSection(0)
-  interactionHandler.safeDataSource.deleteLastItemInSection(0)
-  interactionHandler.safeDataSource.deleteLastItemInSection(0)
-  interactionHandler.safeDataSource.deleteLastItemInSection(0)
+//  interactionHandler.safeDataSource.deleteLastItemInSection(0)
+//  interactionHandler.safeDataSource.deleteLastItemInSection(0)
+//  interactionHandler.safeDataSource.deleteLastItemInSection(0)
+//  interactionHandler.safeDataSource.deleteLastItemInSection(0)
+//  interactionHandler.safeDataSource.deleteLastItemInSection(0)
+//  interactionHandler.safeDataSource.deleteLastItemInSection(0)
+//  interactionHandler.safeDataSource.deleteLastItemInSection(0)
+//  interactionHandler.safeDataSource.deleteLastItemInSection(0)
+//  interactionHandler.safeDataSource.deleteLastItemInSection(0)
+//  interactionHandler.safeDataSource.deleteLastItemInSection(0)
+//  interactionHandler.safeDataSource.deleteLastItemInSection(0)
+//  interactionHandler.safeDataSource.deleteLastItemInSection(0)
+//  interactionHandler.safeDataSource.deleteLastItemInSection(0)
+//  interactionHandler.safeDataSource.deleteLastItemInSection(0)
 //  interactionHandler.safeDataSource.deleteLastItemInSection(0) // TODO: uncomment and support this use case
 
 }
